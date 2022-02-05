@@ -50,7 +50,8 @@ class HomeController extends Controller
         $notificationBuilder = new PayloadNotificationBuilder('New message from ' . $player_name);
         $notificationBuilder->setBody($message)
                             ->setSound('default')
-                            ->setClickAction(config('app.url') . 'dashboard');
+                            ->setClickAction(config('app.url') . '/dashboard')
+                            ;
 
         $option = $optionBuilder->build();
         $notification = $notificationBuilder->build();
@@ -62,7 +63,7 @@ class HomeController extends Controller
                         ->toArray();
 
         $dataBuilder = new PayloadDataBuilder();
-        $dataBuilder->addData(['a_data' => 'my_data']);
+        $dataBuilder->addData(['click_action' => config('app.url') . '/dashboard']);
         $data = $dataBuilder->build();
 
         $downstreamResponse = FCM::sendTo(array_filter($token), $option, $notification, $data);

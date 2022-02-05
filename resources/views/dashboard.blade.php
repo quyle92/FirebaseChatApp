@@ -38,7 +38,7 @@
                 @csrf
                 <div class="form-group">
                     <label for="message">Message</label>
-                    <input type="text" class="form-control" id="message" name="message">
+                    <input type="text" class="form-control" id="message" name="message" value="hello">
                 </div>
                 <button type="submit" class="btn btn-primary">Submit</button>
             </form>
@@ -81,7 +81,7 @@
     });
 
     messaging.onMessage((payload) => {
-        console.log('message received:');
+        console.log('onMessage');
         console.log(payload)
     });
 </script>

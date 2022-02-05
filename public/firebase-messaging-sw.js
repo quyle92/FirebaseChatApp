@@ -1,5 +1,5 @@
-importScripts('https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js');
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/firebase/8.10.1/firebase.js');
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/firebase/8.10.1/firebase-messaging.min.js');
 
 const firebaseConfig = {
 
@@ -21,19 +21,49 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Received background message ', payload);
+    console.log('onBackgroundMessage ', payload);
     // Customize notification here
-    const {title, body} = payload.notification;
-    const notificationTitle = title;
-    const notificationOptions = {
-        body: body,
-        icon: '/firebase-logo.png'
-    };
-    self.addEventListener('push', function (event) {
-        console.log('push')
-        event.waitUntil(
-            self.registration.showNotification(notificationTitle,
-                notificationOptions)
-        )
-    })
+    // const {title, body} = payload.notification;
+    // const notificationTitle = title;
+    // const notificationOptions = {
+    //     body: body,
+    //     icon: '/firebase-logo.png'
+    // };
+    // self.registration.showNotification(notificationTitle,
+    //     notificationOptions);
+
+
+
 });
+// self.addEventListener('install', (event) => {
+//     console.log('install')
+// })
+// self.addEventListener('activate', (event) => {
+//     console.log('activate')
+// })
+
+// self.addEventListener('notificationclick', function (event) {
+//     console.log('On notification click: ', event.notification);
+//     event.notification.close();
+
+//     // This looks to see if the current is already open and
+//     // focuses if it is
+//     event.waitUntil(clients.matchAll({
+//         type: "window"
+//     }).then(function (clientList) {
+//         console.log(clientList)
+//         for (var i = 0; i < clientList.length; i++) {
+//             var client = clientList[i];
+//             if (client.url == '/dashboard' && 'focus' in client)
+//                 return client.focus();
+//         }
+//         if (clients.openWindow)
+//             return clients.openWindow('/dashboard');
+//     }));
+// });
+
+/**
+ * User resources
+ */
+//https://developers.google.com/web/updates/2015/05/notifying-you-of-changes-to-notifications
+//https://developers.google.com/web/fundamentals/push-notifications/how-push-works
