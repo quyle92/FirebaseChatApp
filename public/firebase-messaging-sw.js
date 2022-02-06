@@ -35,12 +35,6 @@ messaging.onBackgroundMessage((payload) => {
 
 
 });
-// self.addEventListener('install', (event) => {
-//     console.log('install')
-// })
-// self.addEventListener('activate', (event) => {
-//     console.log('activate')
-// })
 
 // self.addEventListener('notificationclick', function (event) {
 //     console.log('On notification click: ', event.notification);

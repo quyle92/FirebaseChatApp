@@ -45,11 +45,13 @@ class HomeController extends Controller
         $fcm_token = $player->fcm_token;
 
         $optionBuilder = new OptionsBuilder();
-        $optionBuilder->setTimeToLive(60 * 20);
+        $optionBuilder->setTimeToLive(60 * 20)
+        ->setPriority('high');
 
         $notificationBuilder = new PayloadNotificationBuilder('New message from ' . $player_name);
         $notificationBuilder->setBody($message)
                             ->setSound('default')
+                            ->setIcon('https://felgo.com/doc/images/used-in-examples/appdemos/qtws/assets/felgo-logo.png')
                             ->setClickAction(config('app.url') . '/dashboard')
                             ;
 
@@ -73,7 +75,7 @@ class HomeController extends Controller
 
     protected function removeChatMessage($team_sn)
     {
-        if(Chat::where('team_sn', $team_sn)->get()->count() > 5)
+        if(Chat::where('team_sn', $team_sn)->get()->count() >2)
             Chat::where('team_sn', $team_sn)->delete();
     }
 }
