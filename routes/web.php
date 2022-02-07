@@ -20,6 +20,9 @@ Route::get('/', function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', 'HomeController@index')->name('dashboard');
     Route::post('/dashboard', 'HomeController@createChat')->name('dashboard.createChat');
+    Route::post('api/start-writting', 'HomeController@startWritting');
+    Route::post('api/stop-writting', 'HomeController@stopWritting');
+    Route::get('api/messages', 'HomeController@getMessages');
 });
 
 require __DIR__.'/auth.php';

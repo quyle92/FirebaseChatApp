@@ -19,3 +19,4 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post('save-token', 'FCMController@index');
+// Route::post('writing-message', 'HomeController@writeMessage');

@@ -24,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // dd(config('app.url'));
         if(config('app.url') !== 'http://127.0.0.1:8000/')
             URL::forceScheme('https'); //force https in laravel (you can make it in apache but need to config it).
     }

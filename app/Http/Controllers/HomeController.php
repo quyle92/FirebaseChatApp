@@ -21,6 +21,13 @@ class HomeController extends Controller
         return view('dashboard', compact('chats'));
     }
 
+    public function getMessages()
+    {
+        $team_sn = Auth::user()->team_sn;
+        $chats = Chat::where('team_sn', $team_sn)->get(['player_sn', 'player_name', 'message']);
+        return response()->json($chats);
+    }
+
     public function createChat(Request $request)
     {
         $player = Auth::user();
@@ -40,7 +47,6 @@ class HomeController extends Controller
 
     protected function broadcastMessage($player, $message)
     {
-        $team_sn = $player->team_sn;
         $player_name = $player->player_name;
         $fcm_token = $player->fcm_token;
 
@@ -58,15 +64,9 @@ class HomeController extends Controller
         $option = $optionBuilder->build();
         $notification = $notificationBuilder->build();
 
-        $token = Player::where('team_sn', $team_sn)
-                        ->get('fcm_token')
-                        ->pluck('fcm_token')
-                        ->except([$fcm_token])
-                        ->toArray();
+        $token = $this->getFcmToken($fcm_token);
 
-        $dataBuilder = new PayloadDataBuilder();
-        $dataBuilder->addData(['click_action' => config('app.url') . '/dashboard']);
-        $data = $dataBuilder->build();
+        $data = $this->getDataBuilder(['click_action' => config('app.url') . '/dashboard']);
 
         $downstreamResponse = FCM::sendTo(array_filter($token), $option, $notification, $data);
 
@@ -77,5 +77,47 @@ class HomeController extends Controller
     {
         if(Chat::where('team_sn', $team_sn)->get()->count() >2)
             Chat::where('team_sn', $team_sn)->delete();
+    }
+
+    public function startWritting(Request $request)
+    {
+        $fcm_token = $request->fcmToken;
+        $token = $this->getFcmToken($fcm_token);
+
+        $data = $this->getDataBuilder(['player' => Auth::user(), 'action' => 'write']);
+
+        $downstreamResponse = FCM::sendTo(array_filter($token), $option = null, $notification = null, $data );
+
+        return $downstreamResponse->numberSuccess();
+    }
+
+    public function stopWritting(Request $request)
+    {
+        $fcm_token = $request->fcmToken;
+        $token = $this->getFcmToken($fcm_token);
+
+        $data = $this->getDataBuilder(['player' => Auth::user(), 'action' => 'stop']);
+
+        $downstreamResponse = FCM::sendTo(array_filter($token), $option = null, $notification = null, $data);
+
+        return $downstreamResponse->numberSuccess();
+    }
+
+    protected function getFcmToken($fcm_token)
+    {
+        $team_sn = Auth::user()->team_sn;
+        return Player::where('team_sn', $team_sn)
+            ->where('fcm_token', '<>', $fcm_token)
+            ->get('fcm_token')
+            ->pluck('fcm_token')
+            ->except([$fcm_token])
+            ->toArray();
+    }
+
+    protected function getDataBuilder($input)
+    {
+        $dataBuilder = new PayloadDataBuilder();
+        $dataBuilder->addData($input);
+        return $dataBuilder->build();
     }
 }
