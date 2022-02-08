@@ -17,17 +17,11 @@
                 <div class="card">
                     <div class="card-body">
                         <div class="d-flex flex-column ">
-                            <!-- @forelse ($chats as $chat)
-                            @if($chat->player_sn !== Auth::id())
-                            <p class="chat chat-left">{{$chat->message}}</p>
-                            <small class="chat-left">{{$chat->player_name}}</small>
-                            @else
-                            <p class="chat chat-right bg-info text-white">{{$chat->message}}</p>
-                            <small class="chat-right">You - {{$chat->player_name}}</small>
-                            @endif
-                            @empty
-                            <p class="mx-auto">No chat messages.</p>
-                            @endforelse -->
+                            <template v-for="(item, index) in messageList">
+                                <p class="chat" :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right bg-info text-white']" :key="index">@{{item.message}}</p>
+                                <small :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right']">@{{item.player_name}}</small>
+                            </template>
+                            <p class="mx-auto" v-if="messageList.length === 0">No chat messages.</p>
                         </div>
                         <small v-html="chatNotice"></small>
                     </div>
@@ -35,14 +29,16 @@
             </div>
         </div>
         <div class="card mt-5">
-            <form class="p-3" method="post">
+            <form class="p-3" @submit.prevent="submitMessage">
                 @csrf
                 <div class="form-group">
                     <label for="message">Message</label>
-                    <input type="text" class="form-control" id="message" name="message" v-model="message" @input="startWritting" @blur="stopWriting">
+                    <input type="text" class="form-control" id="message" name="message" v-model="message" @input="startWritting" @keyup="stopWriting">
                 </div>
                 <button type="submit" class="btn btn-primary">Submit</button>
+                <button class="btn btn-danger float-right" @click.prevent="removeAllChat">Remove All Chat</button>
             </form>
+
         </div>
     </div>
 </div>
@@ -50,9 +46,13 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.9.0/css/all.min.css" />
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 <script type="text/javascript">
     const messaging = firebase.messaging();
+    const db = firebase.firestore();
+    const team_sn = '{{Auth::user()->team_sn}}';
     const player_sn = '{{Auth::id()}}';
+    const player_name = '{{Auth::user()->player_name}}';
 
     var app = new Vue({
         el: '#chatForm',
@@ -60,13 +60,18 @@
             messageList: [],
             message: 'Hello Vue!',
             fcmToken: '',
-            chatNotice: ''
+            chatNotice: '',
+            count: 0
+
+        },
+        computed: {
+
         },
         methods: {
             sendTokenToServer(fcm_token) {
                 axios.post('api/save-token', {
-                        fcm_token,
-                        player_sn
+                        fcm_token: fcm_token,
+                        player_sn: player_sn
                     })
                     .then(function(response) {
                         // console.log(response);
@@ -75,22 +80,72 @@
                         console.log(error);
                     });
             },
-            startWritting() {
+            startWritting: debounce(function() {
+                console.log('startWritting')
                 axios.post('api/start-writting', {
                     fcmToken: this.fcmToken,
                 })
-            },
-            stopWriting() {
+                this.chatNotice = '';
+            }, 500, true),
+            stopWriting: debounce(function() {
                 axios.post('api/stop-writting', {
                     fcmToken: this.fcmToken,
                 })
-                this.user = '';
-                this.activeChat = 'none';
+                this.chatNotice = '';
+            }, 500),
+            fetchMessages() {
+                db.collection("chat").doc(team_sn)
+                    .onSnapshot((doc) => {
+                        if (doc.exists) {
+                            let sortable = [];
+                            for (let vehicle in doc.data()) {
+                                sortable.push(doc.data()[vehicle]);
+                            }
+                            sortable.sort(function(a, b) {
+                                return a.time - b.time;
+                            });
+                            let data = [];
+                            sortable.forEach((item) => {
+                                if (item.player_sn === player_sn) {
+                                    item.isOwner = 1;
+                                } else {
+                                    item.isOwner = 0;
+                                }
+                                data.push(item)
+                            });
+                            this.messageList = data;
+                        }
+                    });
             },
-            async fetchMessages() {
-                let response = await axios.get('api/messages');
-                console.log(response);
-                this.messageList = response.data;
+            submitMessage(e) {
+                let data = new Map([
+                    ['player_sn', player_sn],
+                    ['player_name', player_name],
+                    ['message', this.message],
+                    ['time', new Date()]
+                ]);
+                let uuid = (new Date()).getTime();
+                this.message = '';
+                let obj = {};
+                obj[uuid] = Object.fromEntries(data);
+                // console.log(obj)
+                db.collection("chat").doc(team_sn).set(obj, {
+                        merge: true
+                    })
+                    .then(() => {
+                        console.log("Document successfully written!");
+                    })
+                    .catch((error) => {
+                        console.error("Error writing document: ", error);
+                    });
+            },
+            removeAllChat() {
+                db.collection("chat").doc(team_sn).delete().then(() => {
+                    console.log("Document successfully deleted!");
+                    this.messageList = []
+                }).catch((error) => {
+                    console.error("Error removing document: ", error);
+                });
             }
         },
         created() {
@@ -116,9 +171,11 @@
                 // console.log(payload);
                 if (player_sn !== payload.data.player.player_sn) {
                     if (payload.data.action === 'write') {
-                        this.chatNotice = '<b><i class="fas fa-pen"></i> ' + JSON.parse(payload.data.player).player_name + ' is writting </b>';
+                        this.chatNotice = '<b><i class="fas fa-pen"></i> ' + JSON.parse(payload.data.player).player_name + ' is writting. </b>';
+                        // setTimeout(() => { this.chatNotice = ''}, 500);
                     }
                     if (payload.data.action === 'stop') {
+                        console.log('stop writing');
                         this.chatNotice = ''
                     }
                 }
@@ -126,8 +183,33 @@
             });
 
             this.fetchMessages();
-        }
+            // this.stopWriting(); //remove 'is writting' notice on page load.
+        },
+        // beforeDestroy() {
+        //     this.stopWriting();
+        // }
     })
+
+    // Returns a function, that, as long as it continues to be invoked, will not
+    // be triggered. The function will be called after it stops being called for
+    // N milliseconds. If `immediate` is passed, trigger the function on the
+    // leading edge, instead of the trailing.
+    function debounce(func, wait, immediate) {
+
+        var timeout;
+        return function() {
+            var context = this,
+                args = arguments;
+            var later = function() {
+                timeout = null;
+                if (!immediate) func.apply(context, args);
+            };
+            var callNow = immediate && !timeout;
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+            if (callNow) func.apply(context, args);
+        };
+    };
 </script>
 @endpush
 @push('styles')

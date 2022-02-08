@@ -16,7 +16,18 @@ class HomeController extends Controller
     public function index()
     {
         $team_sn = Auth::user()->team_sn;
-        $chats = Chat::where('team_sn', $team_sn)->get();
+        $chats = Chat::where('team_sn', $team_sn)
+                    ->get()
+                    ->map(function($item) {
+                        if($item->player_sn === Auth::user()->player_sn ){
+                            $item->is_owner = 1;
+                        }
+                        else {
+                            $item->is_owner = 0;
+                        }
+                        return $item;
+                    });
+
         $this->removeChatMessage($team_sn);
         return view('dashboard', compact('chats'));
     }
@@ -24,7 +35,16 @@ class HomeController extends Controller
     public function getMessages()
     {
         $team_sn = Auth::user()->team_sn;
-        $chats = Chat::where('team_sn', $team_sn)->get(['player_sn', 'player_name', 'message']);
+        $chats = Chat::where('team_sn', $team_sn)
+                    ->get(['player_sn', 'player_name', 'message'])
+                    ->map(function ($item) {
+                        if ($item->player_sn === Auth::user()->player_sn) {
+                            $item->is_owner = 1;
+                        } else {
+                            $item->is_owner = 0;
+                        }
+                        return $item;
+                    });
         return response()->json($chats);
     }
 
