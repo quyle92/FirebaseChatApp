@@ -4,32 +4,55 @@ namespace App\Http\Controllers;
 
 use FCM;
 use App\Models\Chat;
+use Firebase\JWT\JWT;
 use App\Models\Player;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use LaravelFCM\Message\OptionsBuilder;
+use Illuminate\Support\Facades\Storage;
 use LaravelFCM\Message\PayloadDataBuilder;
 use LaravelFCM\Message\PayloadNotificationBuilder;
-
+use Firebase\JWT\Key;
 class HomeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $team_sn = Auth::user()->team_sn;
-        $chats = Chat::where('team_sn', $team_sn)
-                    ->get()
-                    ->map(function($item) {
-                        if($item->player_sn === Auth::user()->player_sn ){
-                            $item->is_owner = 1;
-                        }
-                        else {
-                            $item->is_owner = 0;
-                        }
-                        return $item;
-                    });
+        $player = Auth::user();
+        $team_sn = $player->team_sn;
+        $google_application_credentials = json_decode((file_get_contents(env('GOOGLE_APPLICATION_CREDENTIALS'))));
+        $private_key = $google_application_credentials->private_key;
+        $open_ssl_asymmetric_key = openssl_pkey_get_private($private_key);
+        $public_key = openssl_pkey_get_details($open_ssl_asymmetric_key)['key'];//(1)
+        $client_email = $google_application_credentials->client_email;
+        $uid = $player->player_sn;
+// dd($private_key);
+        if(!$jwt = $player->jwt ) {
+            $this->createNewJWT($client_email, $uid, $player, $private_key);
+        }
+        // list($header, $payload, $signature) = explode(".", $jwt);
+        // $payload = json_decode(base64_decode($payload));
+        // $expire_time = $payload->exp;
+        // if(now()->timestamp > $expire_time) {
+        //     $this->createNewJWT($client_email, $uid, $player, $private_key);
+        // }
+        // $decoded = JWT::decode($jwt, $public_key, ['RS256']);
+        // dd(now()->timestamp > $decoded->exp);
+        return view('dashboard', compact('jwt'));
+    }
 
-        $this->removeChatMessage($team_sn);
-        return view('dashboard', compact('chats'));
+    protected function createNewJWT($client_email, $uid, $player, $private_key)
+    {
+        $payload = array(
+            "iss" => $client_email,
+            "sub" => $client_email,
+            "aud" => "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+            "iat" => now()->timestamp,
+            "exp" => now()->timestamp + (60 * 60),  // Maximum expiration time is one hour
+            "uid" => $uid,
+        );
+        $jwt = JWT::encode($payload, $private_key, 'RS256');
+        $player->jwt = $jwt;
+        $player->save();
     }
 
     public function getMessages()
@@ -141,3 +164,8 @@ class HomeController extends Controller
         return $dataBuilder->build();
     }
 }
+
+/**
+ * Notes
+ */
+//(1): create public key from private key https://github.com/firebase/php-jwt/issues/116#issuecomment-260809197

@@ -1,7 +1,8 @@
 <?php
 
+use App\Models\Team;
 use Illuminate\Support\Facades\Route;
-
+use Google\Cloud\Firestore\FirestoreClient;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -13,8 +14,21 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
+Route::get('/add-teams-doc', function () {
+    $db = new FirestoreClient([
+        'projectId' => env('ProjectID'),
+    ]);
+
+    $teams = Team::with('players')->get();
+    foreach ($teams as $team) {
+        $player_sn_list = $team->players->map(function ($player) {
+            return $player->player_sn;
+        });
+        $docRef = $db->collection('teams')->document($team->team_sn);
+        $docRef->set([
+            'player_sn_list' => $player_sn_list->toArray()
+        ], ['merge' => true]);
+    }
 });
 
 Route::middleware(['auth'])->group(function () {

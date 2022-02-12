@@ -18,10 +18,14 @@
                     <div class="card-body">
                         <div class="d-flex flex-column ">
                             <template v-for="(item, index) in messageList">
-                                <p class="chat" :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right bg-info text-white']" :key="index">@{{item.message}}</p>
+                                <p class="chat" :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right bg-info text-white']" :key="index" @contextmenu="openMenu($event)">@{{item.message}}</p>
                                 <small :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right']">@{{item.player_name}}</small>
                             </template>
                             <p class="mx-auto" v-if="messageList.length === 0">No chat messages.</p>
+                            <ul id="right-click-menu" tabindex="-1" v-if="viewMenu" :style="{top:top, left:left}" v-click-outside="hideMenu">
+                                <li>First list item</li>
+                                <li>Second list item</li>
+                            </ul>
                         </div>
                         <small v-html="chatNotice"></small>
                     </div>
@@ -44,15 +48,36 @@
 </div>
 @endsection
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.9.0/css/all.min.css" />
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/8.10.1/firebase-auth.min.js"></script>
+
 <script type="text/javascript">
     const messaging = firebase.messaging();
     const db = firebase.firestore();
     const team_sn = '{{Auth::user()->team_sn}}';
     const player_sn = '{{Auth::id()}}';
     const player_name = '{{Auth::user()->player_name}}';
+    const jwt = '{{$jwt}}';
+    // console.log(jwt)
+    const contextMenu = document.getElementById("right-click-menu")
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        firebase.auth().signInWithCustomToken(jwt)
+            .then((userCredential) => {
+                // Signed in
+                console.log(userCredential.user.refreshToken)
+            })
+            .catch((error) => {
+                var errorCode = error.code;
+                var errorMessage = error.message;
+                // ...
+                console.log(error)
+            });
+        // see docs for a list of available properties
+        // https://firebase.google.com/docs/reference/js/firebase.User
+    }
 
     var app = new Vue({
         el: '#chatForm',
@@ -61,11 +86,9 @@
             message: 'Hello Vue!',
             fcmToken: '',
             chatNotice: '',
-            count: 0
-
-        },
-        computed: {
-
+            viewMenu: false,
+            top: '0px',
+            left: '0px'
         },
         methods: {
             sendTokenToServer(fcm_token) {
@@ -80,26 +103,30 @@
                         console.log(error);
                     });
             },
+
             startWritting: debounce(function() {
-                console.log('startWritting')
+                // console.log('startWritting')
                 axios.post('api/start-writting', {
                     fcmToken: this.fcmToken,
                 })
                 this.chatNotice = '';
             }, 500, true),
+
             stopWriting: debounce(function() {
+                // console.log('stopWriting')
                 axios.post('api/stop-writting', {
                     fcmToken: this.fcmToken,
                 })
                 this.chatNotice = '';
-            }, 500),
+            }, 300),
+
             fetchMessages() {
-                db.collection("chat").doc(team_sn)
+                db.collection("chats").doc(team_sn)
                     .onSnapshot((doc) => {
                         if (doc.exists) {
                             let sortable = [];
-                            for (let vehicle in doc.data()) {
-                                sortable.push(doc.data()[vehicle]);
+                            for (let x in doc.data()) {
+                                sortable.push(doc.data()[x]);
                             }
                             sortable.sort(function(a, b) {
                                 return a.time - b.time;
@@ -114,9 +141,12 @@
                                 data.push(item)
                             });
                             this.messageList = data;
+                        } else {
+                            this.messageList = [];
                         }
                     });
             },
+
             submitMessage(e) {
                 let data = new Map([
                     ['player_sn', player_sn],
@@ -128,8 +158,9 @@
                 this.message = '';
                 let obj = {};
                 obj[uuid] = Object.fromEntries(data);
+                // obj['player_sn'] = player_sn
                 // console.log(obj)
-                db.collection("chat").doc(team_sn).set(obj, {
+                db.collection("chats").doc(team_sn).set(obj, {
                         merge: true
                     })
                     .then(() => {
@@ -139,15 +170,50 @@
                         console.error("Error writing document: ", error);
                     });
             },
+
             removeAllChat() {
-                db.collection("chat").doc(team_sn).delete().then(() => {
+                db.collection("chats").doc(team_sn).delete().then(() => {
                     console.log("Document successfully deleted!");
-                    this.messageList = []
                 }).catch((error) => {
                     console.error("Error removing document: ", error);
                 });
+            },
+
+            removeMessage: function(e) {
+                //do stuff
+                e.preventDefault();
+                alert('hello')
+            },
+
+            setMenu: function(top, left) {
+
+                largestHeight = window.innerHeight - contextMenu.offsetHeight - 25;
+                largestWidth = window.innerWidth - contextMenu.offsetWidth - 25;
+
+                if (top > largestHeight) top = largestHeight;
+
+                if (left > largestWidth) left = largestWidth;
+
+                this.top = top + 'px';
+                this.left = left + 'px';
+            },
+
+            hideMenu: function() {
+                this.viewMenu = false;
+            },
+
+            openMenu: function(e) {
+                this.viewMenu = true;
+
+                Vue.nextTick(function() {
+                    contextMenu.focus();
+
+                    this.setMenu(e.y, e.x)
+                }.bind(this));
+                e.preventDefault();
             }
         },
+
         created() {
             messaging.getToken({
                 vapidKey: '{{config("fcm.VAPID")}}'
@@ -172,7 +238,6 @@
                 if (player_sn !== payload.data.player.player_sn) {
                     if (payload.data.action === 'write') {
                         this.chatNotice = '<b><i class="fas fa-pen"></i> ' + JSON.parse(payload.data.player).player_name + ' is writting. </b>';
-                        // setTimeout(() => { this.chatNotice = ''}, 500);
                     }
                     if (payload.data.action === 'stop') {
                         console.log('stop writing');
@@ -183,33 +248,14 @@
             });
 
             this.fetchMessages();
-            // this.stopWriting(); //remove 'is writting' notice on page load.
+            this.stopWriting(); //remove 'is writting' notice on page load.
         },
-        // beforeDestroy() {
-        //     this.stopWriting();
-        // }
+
+        beforeDestroy() {
+            this.stopWriting();
+        },
+
     })
-
-    // Returns a function, that, as long as it continues to be invoked, will not
-    // be triggered. The function will be called after it stops being called for
-    // N milliseconds. If `immediate` is passed, trigger the function on the
-    // leading edge, instead of the trailing.
-    function debounce(func, wait, immediate) {
-
-        var timeout;
-        return function() {
-            var context = this,
-                args = arguments;
-            var later = function() {
-                timeout = null;
-                if (!immediate) func.apply(context, args);
-            };
-            var callNow = immediate && !timeout;
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-            if (callNow) func.apply(context, args);
-        };
-    };
 </script>
 @endpush
 @push('styles')
@@ -227,6 +273,34 @@
 
     .chat-right {
         align-self: flex-end;
+    }
+
+    #right-click-menu {
+        background: #FAFAFA;
+        border: 1px solid #BDBDBD;
+        box-shadow: 0 2px 2px 0 rgba(0, 0, 0, .14), 0 3px 1px -2px rgba(0, 0, 0, .2), 0 1px 5px 0 rgba(0, 0, 0, .12);
+        display: block;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: fixed;
+        width: 250px;
+        z-index: 999999;
+    }
+
+    #right-click-menu li {
+        border-bottom: 1px solid #E0E0E0;
+        margin: 0;
+        padding: 5px 35px;
+    }
+
+    #right-click-menu li:last-child {
+        border-bottom: none;
+    }
+
+    #right-click-menu li:hover {
+        background: #1E88E5;
+        color: #FAFAFA;
     }
 </style>
 @endpush

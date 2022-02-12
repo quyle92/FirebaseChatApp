@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class Player extends Authenticatable
 {
     protected $primaryKey  = 'player_sn';
     public $incrementing = false;
     protected $keyType = 'string';
-
-    use HasFactory;
 
     public function team()
     {

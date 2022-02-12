@@ -7,7 +7,10 @@
     "require": {
         "php": "^7.3|^8.0",
         "code-lts/laravel-fcm": "^1.6",
+        "firebase/php-jwt": "5.0",
         "fruitcake/laravel-cors": "^2.0",
+        "google/cloud-firestore": "^1.21",
+        "grpc/grpc": "^1.38",
         "guzzlehttp/guzzle": "^7.0.1",
         "laravel/framework": "^8.75",
         "laravel/sanctum": "^2.11",
