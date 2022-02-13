@@ -21,23 +21,34 @@ class HomeController extends Controller
         $team_sn = $player->team_sn;
         $google_application_credentials = json_decode((file_get_contents(env('GOOGLE_APPLICATION_CREDENTIALS'))));
         $private_key = $google_application_credentials->private_key;
-        $open_ssl_asymmetric_key = openssl_pkey_get_private($private_key);
-        $public_key = openssl_pkey_get_details($open_ssl_asymmetric_key)['key'];//(1)
         $client_email = $google_application_credentials->client_email;
         $uid = $player->player_sn;
-// dd($private_key);
+
         if(!$jwt = $player->jwt ) {
-            $this->createNewJWT($client_email, $uid, $player, $private_key);
+            $jwt = $this->createNewJWT($client_email, $uid, $player, $private_key);
         }
-        // list($header, $payload, $signature) = explode(".", $jwt);
-        // $payload = json_decode(base64_decode($payload));
-        // $expire_time = $payload->exp;
-        // if(now()->timestamp > $expire_time) {
-        //     $this->createNewJWT($client_email, $uid, $player, $private_key);
-        // }
-        // $decoded = JWT::decode($jwt, $public_key, ['RS256']);
-        // dd(now()->timestamp > $decoded->exp);
+
+        //Option 1 to get jwt payload:
+        list($header, $payload, $signature) = explode(".", $jwt);
+        $payload = json_decode(base64_decode($payload));
+
+        //Option 2 to get jwt payload:
+        // $public_key = $this->createPublicKey($private_key);
+        // $payload = JWT::decode($jwt, $public_key, ['RS256']);
+
+        $expire_time = $payload->exp;
+        if (now()->timestamp > $expire_time) {
+            $jwt = $this->createNewJWT($client_email, $uid, $player, $private_key);
+        }
+
         return view('dashboard', compact('jwt'));
+    }
+
+    protected function createPublicKey($private_key)
+    {
+        $open_ssl_asymmetric_key = openssl_pkey_get_private($private_key);
+        $public_key = openssl_pkey_get_details($open_ssl_asymmetric_key)['key'];//(1)
+        return $public_key;
     }
 
     protected function createNewJWT($client_email, $uid, $player, $private_key)
@@ -53,6 +64,8 @@ class HomeController extends Controller
         $jwt = JWT::encode($payload, $private_key, 'RS256');
         $player->jwt = $jwt;
         $player->save();
+
+        return $jwt;
     }
 
     public function getMessages()

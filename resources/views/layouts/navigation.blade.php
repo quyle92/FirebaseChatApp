@@ -38,9 +38,9 @@
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
 
-                            <x-dropdown-link :href="route('logout')"
-                                    onclick="event.preventDefault();
-                                                this.closest('form').submit();">
+                            <x-dropdown-link :href="route('logout')" onclick="event.preventDefault();
+                                                this.closest('form').submit();
+                                                logOutChat()">
                                 {{ __('Log Out') }}
                             </x-dropdown-link>
                         </form>
@@ -80,9 +80,9 @@
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
 
-                    <x-responsive-nav-link :href="route('logout')"
-                            onclick="event.preventDefault();
-                                        this.closest('form').submit();">
+                    <x-responsive-nav-link :href="route('logout')" onclick="event.preventDefault();
+                                        this.closest('form').submit();
+                                        logOutChat()">
                         {{ __('Log Out') }}
                     </x-responsive-nav-link>
                 </form>
@@ -90,3 +90,15 @@
         </div>
     </div>
 </nav>
+@push('scripts')
+<script type="text/javascript">
+    function logOutChat() {
+        firebase.auth().signOut().then(() => {
+            console.log('Sign-out successful.');
+            unsubscribe();
+        }).catch((error) => {
+            console.log('An error happened.')
+        });
+    }
+</script>
+@endpush
