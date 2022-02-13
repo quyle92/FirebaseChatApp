@@ -16,13 +16,13 @@
                     <div class="card-body">
                         <div class="d-flex flex-column ">
                             <template v-for="(item, index) in messageList">
-                                <p class="chat" :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right bg-info text-white']" :key="index" @contextmenu="openMenu($event)">@{{item.message}}</p>
-                                <small :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right']">@{{item.player_name}}</small>
+                                <small :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right']">@{{item.player_name}} - (@{{item.updated_at ? new Date(item.updated_at.seconds * 1000) : new Date(item.created_at.seconds * 1000)}})</small>
+                                <p class="chat" :class="[item.isOwner !== 1 ? 'chat-left' : 'chat-right bg-info text-white']" :key="index" @contextmenu="openMenu($event, item.created_at,index)">@{{item.message}}</p>
                             </template>
                             <p class="mx-auto" v-if="messageList.length === 0">No chat messages.</p>
                             <ul id="right-click-menu" tabindex="-1" v-if="viewMenu" :style="{top:top, left:left}" v-click-outside="hideMenu">
-                                <li>First list item</li>
-                                <li>Second list item</li>
+                                <li @click="editMessage">Edit</li>
+                                <li @click="removeMessage">Remove</li>
                             </ul>
                         </div>
                         <small v-html="chatNotice"></small>
@@ -64,12 +64,12 @@
     var unsubscribe = firebase.auth().onAuthStateChanged(function(user) {
         if (user) {
             //retrieve IdToken: https: //firebase.google.com/docs/auth/admin/verify-id-tokens#retrieve_id_tokens_on_clients
-            user.getIdToken().then(idToken => console.log('idToken: ' + idToken))
+            // user.getIdToken().then(idToken => console.log('idToken: ' + idToken))
         } else {
             firebase.auth().signInWithCustomToken(jwt)
                 .then((userCredential) => {
                     // Signed in
-                    console.log('refreshToken: ' + userCredential.user.refreshToken)
+                    // console.log('refreshToken: ' + userCredential.user.refreshToken)
                 })
                 .catch((error) => {
                     var errorCode = error.code;
@@ -91,7 +91,10 @@
             chatNotice: '',
             viewMenu: false,
             top: '0px',
-            left: '0px'
+            left: '0px',
+            chatId: '',
+            chatIndex: '',
+            action: 'create'
         },
         methods: {
             sendTokenToServer(fcm_token) {
@@ -151,27 +154,65 @@
             },
 
             submitMessage(e) {
+                let chatAt = new Date();
                 let data = new Map([
                     ['player_sn', player_sn],
                     ['player_name', player_name],
                     ['message', this.message],
-                    ['time', new Date()]
                 ]);
-                let uuid = (new Date()).getTime();
-                this.message = '';
-                let obj = {};
-                obj[uuid] = Object.fromEntries(data);
-                // obj['player_sn'] = player_sn
-                // console.log(obj)
-                db.collection("chats").doc(team_sn).set(obj, {
+
+                if (this.action === "create") {
+                    // console.log(this.action)
+                    let uuid = Math.floor(new Date().getTime() / 1000);
+                    let obj = {};
+                    data.set('created_at', chatAt)
+                    obj[uuid] = Object.fromEntries(data);
+
+                    db.collection("chats").doc(team_sn).set(obj, {
+                            merge: true
+                        })
+                        .then(() => {
+                            console.log("Document successfully written!");
+                        })
+                        .catch((error) => {
+                            console.error("Error writing document: ", error);
+                        });
+                }
+
+                if (this.action === "edit") {
+                    // console.log(this.action)
+                    data.set('created_at', this.messageList[this.chatIndex].created_at)
+                    data.set('updated_at', chatAt);
+                    let obj = {};
+                    obj[this.chatId] = Object.fromEntries(data);
+                    db.collection("chats").doc(team_sn).set(obj, {
                         merge: true
-                    })
-                    .then(() => {
-                        console.log("Document successfully written!");
-                    })
-                    .catch((error) => {
-                        console.error("Error writing document: ", error);
+                    }).then(() => {
+                        console.log("Document updated successfully!");
+                    }).catch((error) => {
+                        console.error("Error updating document: ", error);
                     });
+                    this.action = 'create'
+                }
+
+                this.message = '';
+            },
+
+            editMessage: function() {
+                this.action = "edit";
+                this.hideMenu();
+                this.message = this.messageList[this.chatIndex].message;
+            },
+
+            removeMessage: function() {
+                let obj = {};
+                obj[this.chatId] = firebase.firestore.FieldValue.delete();
+                db.collection("chats").doc(team_sn).update(obj).then(() => {
+                    console.log("Document successfully deleted!");
+                }).catch((error) => {
+                    console.error("Error removing document: ", error);
+                });
+                this.hideMenu();
             },
 
             removeAllChat() {
@@ -182,11 +223,7 @@
                 });
             },
 
-            removeMessage: function(e) {
-                //do stuff
-                e.preventDefault();
-                alert('hello')
-            },
+
 
             setMenu: function(top, left) {
 
@@ -205,8 +242,10 @@
                 this.viewMenu = false;
             },
 
-            openMenu: function(e) {
+            openMenu: function(e, chatId, chatIndex) {
                 this.viewMenu = true;
+                this.chatId = chatId.seconds;
+                this.chatIndex = chatIndex;
 
                 Vue.nextTick(function() {
                     contextMenu.focus();
