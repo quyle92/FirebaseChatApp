@@ -262,7 +262,7 @@
             }).then((currentToken) => {
                 // console.log(currentToken)
                 if (currentToken) {
-                    // this.sendTokenToServer(currentToken);
+                    this.sendTokenToServer(currentToken);
                     this.fcmToken = currentToken
                 } else {
                     // Show permission request UI

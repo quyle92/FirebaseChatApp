@@ -20,7 +20,7 @@ class HomeController extends Controller
         $player = Auth::user();
         $team_sn = $player->team_sn;
         $google_application_credentials = json_decode((file_get_contents(env('GOOGLE_APPLICATION_CREDENTIALS'))));
-        $private_key = $google_application_credentials->private_key;
+        $private_key  = $google_application_credentials->private_key;
         $client_email = $google_application_credentials->client_email;
         $uid = $player->player_sn;
 
