@@ -154,6 +154,12 @@
             },
 
             submitMessage(e) {
+                axios.post('api/send-push-message', {
+                    fcmToken: this.fcmToken,
+                }).then(function (response) {
+                    console.log(response)
+                });
+
                 let chatAt = new Date();
                 let data = new Map([
                     ['player_sn', player_sn],
@@ -223,8 +229,6 @@
                 });
             },
 
-
-
             setMenu: function(top, left) {
 
                 largestHeight = window.innerHeight - contextMenu.offsetHeight - 25;
@@ -276,8 +280,7 @@
 
             messaging.onMessage((payload) => {
                 // console.log('onMessage');
-                // console.log(payload);
-                if (player_sn !== payload.data.player.player_sn) {
+                if (player_sn !== payload.data?.player.player_sn) {
                     if (payload.data.action === 'write') {
                         this.chatNotice = '<b><i class="fas fa-pen"></i> ' + JSON.parse(payload.data.player).player_name + ' is writting. </b>';
                     }

@@ -84,21 +84,22 @@ class HomeController extends Controller
         return response()->json($chats);
     }
 
-    public function createChat(Request $request)
+    public function sendPushMessage(Request $request)
     {
         $player = Auth::user();
         $message = $request->message;
-        $chat = new Chat([
-            'team_sn' => $player->team_sn,
-            'player_sn' => $player->player_sn,
-            'player_name' => $player->player_name,
-            'message' => $message
-        ]);
+        // $chat = new Chat([
+        //     'team_sn' => $player->team_sn,
+        //     'player_sn' => $player->player_sn,
+        //     'player_name' => $player->player_name,
+        //     'message' => $message
+        // ]);
 
-        $chat->save();
+        // $chat->save();
 
-        $this->broadcastMessage($player, $message);
-        return redirect()->back();
+        $downstreamResponse = $this->broadcastMessage($player, $message);
+        // dd($downstreamResponse);
+        return response()->json($downstreamResponse, 200);
     }
 
     protected function broadcastMessage($player, $message)
@@ -122,11 +123,11 @@ class HomeController extends Controller
 
         $token = $this->getFcmToken($fcm_token);
 
-        $data = $this->getDataBuilder(['click_action' => config('app.url') . '/dashboard']);
+        $data = $this->getDataBuilder(['click_action' => config('app.url') . 'dashboard']);
 
-        $downstreamResponse = FCM::sendTo(array_filter($token), $option, $notification, $data);
+        return $downstreamResponse = FCM::sendTo(array_filter($token), $option, $notification, $data);
 
-        return $downstreamResponse->numberSuccess();
+        // return $downstreamResponse->numberSuccess();
     }
 
     protected function removeChatMessage($team_sn)
