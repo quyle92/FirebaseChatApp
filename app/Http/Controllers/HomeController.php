@@ -5,14 +5,16 @@ namespace App\Http\Controllers;
 use FCM;
 use App\Models\Chat;
 use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
 use App\Models\Player;
+use App\Jobs\FCMWebpush;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use LaravelFCM\Message\OptionsBuilder;
 use Illuminate\Support\Facades\Storage;
 use LaravelFCM\Message\PayloadDataBuilder;
 use LaravelFCM\Message\PayloadNotificationBuilder;
-use Firebase\JWT\Key;
+
 class HomeController extends Controller
 {
     public function index(Request $request)
@@ -88,18 +90,13 @@ class HomeController extends Controller
     {
         $player = Auth::user();
         $message = $request->message;
-        // $chat = new Chat([
-        //     'team_sn' => $player->team_sn,
-        //     'player_sn' => $player->player_sn,
-        //     'player_name' => $player->player_name,
-        //     'message' => $message
-        // ]);
 
-        // $chat->save();
+        // $downstreamResponse = (array) $this->broadcastMessage($player, $message);
+        // info(json_encode( $downstreamResponse));
+        // return response()->json($downstreamResponse, 200);
 
-        $downstreamResponse = $this->broadcastMessage($player, $message);
-        // dd($downstreamResponse);
-        return response()->json($downstreamResponse, 200);
+        $fcm_tokens = $this->getFcmToken($player->fcm_token);
+        FCMWebpush::dispatch($player, $message, $fcm_tokens);
     }
 
     protected function broadcastMessage($player, $message)
@@ -109,7 +106,7 @@ class HomeController extends Controller
 
         $optionBuilder = new OptionsBuilder();
         $optionBuilder->setTimeToLive(60 * 20)
-        ->setPriority('high');
+                ->setPriority('high');
 
         $notificationBuilder = new PayloadNotificationBuilder('New message from ' . $player_name);
         $notificationBuilder->setBody($message)
@@ -128,12 +125,6 @@ class HomeController extends Controller
         return $downstreamResponse = FCM::sendTo(array_filter($token), $option, $notification, $data);
 
         // return $downstreamResponse->numberSuccess();
-    }
-
-    protected function removeChatMessage($team_sn)
-    {
-        if(Chat::where('team_sn', $team_sn)->get()->count() >2)
-            Chat::where('team_sn', $team_sn)->delete();
     }
 
     public function startWritting(Request $request)

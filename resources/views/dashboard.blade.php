@@ -63,13 +63,13 @@
 
     var unsubscribe = firebase.auth().onAuthStateChanged(function(user) {
         if (user) {
-            //retrieve IdToken: https: //firebase.google.com/docs/auth/admin/verify-id-tokens#retrieve_id_tokens_on_clients
+            //retrieve IdToken: https://firebase.google.com/docs/auth/admin/verify-id-tokens#retrieve_id_tokens_on_clients
             // user.getIdToken().then(idToken => console.log('idToken: ' + idToken))
         } else {
             firebase.auth().signInWithCustomToken(jwt)
                 .then((userCredential) => {
                     // Signed in
-                    // console.log('refreshToken: ' + userCredential.user.refreshToken)
+                    console.log('refreshToken: ' + userCredential.user.refreshToken)
                 })
                 .catch((error) => {
                     var errorCode = error.code;
@@ -156,7 +156,7 @@
             submitMessage(e) {
                 axios.post('api/send-push-message', {
                     fcmToken: this.fcmToken,
-                }).then(function (response) {
+                }).then(function(response) {
                     console.log(response)
                 });
 
@@ -280,7 +280,7 @@
 
             messaging.onMessage((payload) => {
                 // console.log('onMessage');
-                if (player_sn !== payload.data?.player.player_sn) {
+                if (player_sn !== payload.data.player?.player_sn) {
                     if (payload.data.action === 'write') {
                         this.chatNotice = '<b><i class="fas fa-pen"></i> ' + JSON.parse(payload.data.player).player_name + ' is writting. </b>';
                     }
