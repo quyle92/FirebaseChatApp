@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use Mockery;
 use Throwable;
 use App\Models\Player;
 use LaravelFCM\Facades\FCM;
@@ -9,33 +10,38 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Queue\SerializesModels;
 use LaravelFCM\Message\OptionsBuilder;
+use Tests\Unit\DownstreamResponseTest;
 use Illuminate\Queue\InteractsWithQueue;
 use LaravelFCM\Message\PayloadDataBuilder;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use LaravelFCM\Mocks\MockDownstreamResponse;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use LaravelFCM\Message\PayloadNotificationBuilder;
+use LaravelFCM\Response\Exceptions\ServerResponseException;
 
 class FCMWebpush implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $player;
-    public $message;
-    public $fcm_tokens;
-    public $tries = 5;
-    public $currentRetryCount = 1;
-    public $secondsRemaining;
+    protected $player;
+    protected $message;
+    protected $fcm_tokens;
+    protected $retried_count = 1;
+    const DEFAULT_BACKOFF = 3;
+    public $tries = 3;
+    public $maxExceptions = 1;
+
     /**
      * Create a new job instance.
      *
      * @return void
      */
-    public function __construct($player, $message, $fcm_tokens)
+    public function __construct(Player $player, string $message, array $fcm_tokens)
     {
         $this->player = $player;
         $this->message = $message;
-        $this->fcm_tokens = $fcm_tokens;//fcm_tokens is app instance's registration token.
+        $this->fcm_tokens = $fcm_tokens; //fcm_tokens is app instance's registration token.
     }
 
     /**
@@ -45,6 +51,7 @@ class FCMWebpush implements ShouldQueue
      */
     public function handle()
     {
+        DownstreamResponseTest::initMock();
         if ($timestamp = Cache::get('api_limit')) {
             return $this->release(
                 $timestamp - time()
@@ -68,13 +75,12 @@ class FCMWebpush implements ShouldQueue
         $data = Cache::pull('data') ?? self::getDataBuilder(['click_action' => config('app.url') . 'dashboard']);
         $fcm_tokens = Cache::pull('fcm_tokens_to_retried') ?? array_filter($this->fcm_tokens);
 
-        $downstreamResponse = (array) FCM::sendTo($fcm_tokens, $option, $notification, $data);
-        // info($downstreamResponse);
+        $downstreamResponse = FCM::sendTo($fcm_tokens, $option, $notification, $data);
 
         //remove invalid token from DB
         if ($invalid_tokens = array_merge($downstreamResponse->tokensToDelete(), $downstreamResponse->tokensWithError())) {
-            Player::whereIn('fcm_token', $invalid_tokens)
-                ->delete();
+            Player::whereIn('fcm_token', array_keys($invalid_tokens))
+                ->update(['fcm_token' => null]);
         }
 
         if ($tokens_to_modified = $downstreamResponse->tokensToModify()) {
@@ -84,55 +90,30 @@ class FCMWebpush implements ShouldQueue
             }
         }
 
-        //this happens when some fcm_tokens cannot be sent (https://firebase.google.com/docs/cloud-messaging/http-server-ref#error-codes,
-        //vendor/code-lts/laravel-fcm/src/Response/DownstreamResponse.php:::needToResend())
+        //this happens when some fcm_tokens cannot be sent, but still return 2xx response code (https://firebase.google.com/docs/cloud-messaging/http-server-ref#error-codes, vendor/code-lts/laravel-fcm/src/Response/DownstreamResponse.php:::needToResend())
         if ($fcm_tokens_to_retried = $downstreamResponse->tokensToRetry()) {
             // implement exponential backoff.(http://snags88.github.io/backoff-strategy-for-laravel-jobs)
-            $secondsRemaining = now()->addSeconds($this->currentRetryCount *  5);
+            $seconds_remaining = self::DEFAULT_BACKOFF * $this->attempts();
 
-            Cache::put(
-                'api_limit',
-                now()->addSeconds($secondsRemaining)->timestamp,
-                $secondsRemaining
-            );
+            self::cacheApiLimit($seconds_remaining);
+            self::cacheFcmData($fcm_tokens_to_retried, $option, $notification, $data);
 
-            self::cacheData($fcm_tokens_to_retried, $option, $notification, $data);
-            $this->currentRetryCount += 1;
             return $this->release(
-                $secondsRemaining
+                 $seconds_remaining
             );
         }
     }
 
-    /**
-     * Handle a job failure.
-     *
-     * @param  \Throwable  $exception
-     * @return void
-     */
+    //this happens when FCM bumps into 5xx error and throw exception as stated in  https://firebase.google.com/docs/reference/fcm/rest/v1/ErrorCode (REMEMBER: failed() only triggers when there is exception thrown, even if 5xx error is returned but no exception thrown, failed() would not not get triggered).
     public function failed(Throwable $exception)
     {
-        //this happens when all fcm_tokens cannot be sent (it can be UNAVAILABLE or INTERNAL error as specified in https://firebase.google.com/docs/reference/fcm/rest/v1/ErrorCode).
-        $this->secondsRemaining = $exception->retryAfter;
-        $secondsRemaining = $this->secondsRemaining === 1 ? $this->secondsRemaining : $this->secondsRemaining + (30 * $this->currentRetryCount);
-        Cache::put(
-            'api_limit',
-            now()->addSeconds($secondsRemaining)->timestamp,
-            $secondsRemaining
-        );
+        if($exception instanceof ServerResponseException && $this->retried_count <= $this->tries) {
+            $seconds_remaining = $exception->retryAfter * $this->retried_count;
+            self::cacheApiLimit($seconds_remaining);
+            $this->retried_count += 1;
 
-        $this->currentRetryCount++;
-
-    }
-
-    public function backoff()
-    {
-        $exponential_backoff = [];
-        for ($i=1; $i <= $this->currentRetryCount; $i++) {
-            $exponential_backoff[] = $this->secondsRemaining + (30 * $i);
+            return dispatch($this)->delay($seconds_remaining);
         }
-
-        return $exponential_backoff;
     }
 
     protected static function getDataBuilder($input)
@@ -142,7 +123,16 @@ class FCMWebpush implements ShouldQueue
         return $dataBuilder->build();
     }
 
-    protected static function cacheData($fcm_tokens_to_retried, $option, $notification, $data)
+    protected static function cacheApiLimit($seconds_remaining)
+    {
+        Cache::put(
+            'api_limit',
+            now()->addSeconds($seconds_remaining)->timestamp,
+            $seconds_remaining
+        );
+    }
+
+    protected static function cacheFcmData($fcm_tokens_to_retried, $option, $notification, $data)
     {
         Cache::put(
             'fcm_tokens_to_retried',

@@ -13,6 +13,7 @@ class Player extends Authenticatable
     protected $primaryKey  = 'player_sn';
     public $incrementing = false;
     protected $keyType = 'string';
+    protected $guarded = [];
 
     public function team()
     {

@@ -96,7 +96,7 @@ class HomeController extends Controller
         // return response()->json($downstreamResponse, 200);
 
         $fcm_tokens = $this->getFcmToken($player->fcm_token);
-        FCMWebpush::dispatch($player, $message, $fcm_tokens);
+        FCMWebpush::dispatch($player, $message, $fcm_tokens);//(2)
     }
 
     protected function broadcastMessage($player, $message)
@@ -174,3 +174,14 @@ class HomeController extends Controller
  * Notes
  */
 //(1): create public key from private key https://github.com/firebase/php-jwt/issues/116#issuecomment-260809197
+//#(2) dispatch() vs dispatchSync():
+//* dispatch() will push job to queue and process on another process/thread.
+//* dispatchSync() (with ShouldQueue interface):
+//- NOT push job to queue and execute immediately on same process/thread.
+//- DO run through the same pipeline as any other queued job (i.e will run through middleware(), failed(), etc...).
+//- the return of the handle method will NOT be available to the request.
+//* dispatchSync() (without ShouldQueue interface):
+//- NOT push job to queue and execute immediately on same process/thread,
+//- NOT run through the same pipeline as any other queued job (i.e NOT will run through middleware(), failed(), etc...).
+//- the return of the handle method will be available to the request.
+//Ref: https://laracasts.com/discuss/channels/laravel/dispatchnow-vs-dispatchsync?page=1&replyId=645601
